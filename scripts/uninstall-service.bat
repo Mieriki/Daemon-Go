@@ -1,28 +1,26 @@
 @echo off
 chcp 65001 >nul
-echo 正在卸载进程守护服务...
+echo Uninstalling ProcessGuard services...
 echo.
 
-:: 获取当前目录
-set "DIR=%~dp0"
-cd /d "%DIR%"
+set "SCRIPT_DIR=%~dp0"
+set "BASE_DIR=%SCRIPT_DIR%..\"
+cd /d "%BASE_DIR%"
 
-:: 停止服务
-echo 停止服务...
+echo Stopping services...
 sc stop ProcessGuard-A
 sc stop ProcessGuard-B
 
 timeout /t 2 /nobreak >nul
 
-:: 卸载服务
 echo.
-echo 卸载 A 服务...
-"%DIR%daemon-go.exe" --instance a uninstall
+echo Uninstalling ProcessGuard-A...
+"%BASE_DIR%daemon-go.exe" --instance a uninstall
 
 echo.
-echo 卸载 B 服务...
-"%DIR%daemon-go.exe" --instance b uninstall
+echo Uninstalling ProcessGuard-B...
+"%BASE_DIR%daemon-go.exe" --instance b uninstall
 
 echo.
-echo 服务卸载完成。
+echo Uninstallation complete.
 pause

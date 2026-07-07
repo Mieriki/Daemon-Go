@@ -19,12 +19,12 @@ if exist ".guard" (
 
 :found
 if "%TOKEN%"=="" (
-    echo 未找到 .guard 文件或 Token，请先安装并启动 ProcessGuard 服务。
-    echo 当前目录：%CD%
+    echo Token not found. Please install and start ProcessGuard services first.
+    echo Current directory: %CD%
     pause
     exit /b 1
 )
 
-echo 正在打开 ProcessGuard 控制台...
+echo Opening ProcessGuard console...
 start "" "http://127.0.0.1:18080/?token=%TOKEN%"
 endlocal

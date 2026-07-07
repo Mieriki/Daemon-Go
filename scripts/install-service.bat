@@ -1,36 +1,33 @@
 @echo off
 chcp 65001 >nul
-echo 正在安装进程守护服务...
+echo Installing ProcessGuard services...
 echo.
 
-:: 获取当前目录
-set "DIR=%~dp0"
-cd /d "%DIR%"
+set "SCRIPT_DIR=%~dp0"
+set "BASE_DIR=%SCRIPT_DIR%..\"
+cd /d "%BASE_DIR%"
 
-:: 安装 A 服务（主守护）
-echo 安装主守护服务 ProcessGuard-A...
-"%DIR%daemon-go.exe" --instance a install
+echo Installing ProcessGuard-A...
+"%BASE_DIR%daemon-go.exe" --instance a install
 if errorlevel 1 (
-    echo 安装 A 服务失败，请检查是否以管理员身份运行。
+    echo Failed to install ProcessGuard-A. Please run as administrator.
     pause
     exit /b 1
 )
 
-:: 安装 B 服务（备守护）
-echo 安装备守护服务 ProcessGuard-B...
-"%DIR%daemon-go.exe" --instance b install
+echo Installing ProcessGuard-B...
+"%BASE_DIR%daemon-go.exe" --instance b install
 if errorlevel 1 (
-    echo 安装 B 服务失败，请检查是否以管理员身份运行。
+    echo Failed to install ProcessGuard-B. Please run as administrator.
     pause
     exit /b 1
 )
 
-:: 启动服务
 echo.
-echo 启动服务...
+echo Starting services...
 sc start ProcessGuard-A
 sc start ProcessGuard-B
 
 echo.
-echo 服务安装完成。
+echo Installation complete.
 pause
