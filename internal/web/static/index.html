@@ -1,0 +1,635 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>进程守护控制台</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; background: #f5f7fa; color: #333; padding: 20px; }
+        .container { max-width: 960px; margin: 0 auto; }
+        h1 { font-size: 24px; margin-bottom: 20px; color: #1a202c; }
+        h2 { font-size: 18px; margin-bottom: 12px; }
+        h3 { font-size: 16px; margin-bottom: 10px; }
+        .card { background: #fff; border-radius: 8px; padding: 20px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        .status-row { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
+        .status-badge { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 16px; font-size: 14px; font-weight: 500; }
+        .status-running { background: #d1fae5; color: #065f46; }
+        .status-paused { background: #e5e7eb; color: #374151; }
+        .status-failed { background: #fee2e2; color: #991b1b; }
+        .btn { padding: 8px 16px; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; transition: background 0.2s; }
+        .btn-primary { background: #2563eb; color: #fff; }
+        .btn-primary:hover { background: #1d4ed8; }
+        .btn-warning { background: #f59e0b; color: #fff; }
+        .btn-warning:hover { background: #d97706; }
+        .btn-danger { background: #dc2626; color: #fff; }
+        .btn-danger:hover { background: #b91c1c; }
+        .btn-secondary { background: #e5e7eb; color: #374151; }
+        .btn-secondary:hover { background: #d1d5db; }
+        .btn:disabled { opacity: 0.6; cursor: not-allowed; }
+        .btn-sm { padding: 4px 10px; font-size: 12px; }
+        .project { border: 1px solid #e5e7eb; border-radius: 6px; padding: 16px; margin-bottom: 12px; }
+        .project-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+        .project-name { font-size: 16px; font-weight: 600; }
+        .project-info { font-size: 13px; color: #6b7280; margin-bottom: 10px; }
+        .project-info span { margin-right: 16px; }
+        .actions { display: flex; gap: 8px; flex-wrap: wrap; }
+        .logs { background: #1f2937; color: #e5e7eb; padding: 12px; border-radius: 6px; font-family: Consolas, Monaco, monospace; font-size: 12px; max-height: 300px; overflow-y: auto; white-space: pre-wrap; line-height: 1.5; }
+        .empty { color: #9ca3af; text-align: center; padding: 40px; }
+        .refresh { float: right; font-size: 13px; color: #6b7280; }
+        .form-group { margin-bottom: 12px; }
+        .form-group label { display: block; font-size: 13px; color: #4b5563; margin-bottom: 4px; }
+        .form-group input[type="text"], .form-group input[type="number"], .form-group select { width: 100%; padding: 8px 10px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px; }
+        .form-group input[type="checkbox"] { width: auto; margin-right: 6px; }
+        .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+        .form-row-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+        .action-item { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 6px; padding: 10px; margin-bottom: 8px; }
+        .action-params { margin-top: 8px; }
+        .msg { padding: 10px 12px; border-radius: 6px; margin-top: 12px; display: none; }
+        .msg-success { background: #d1fae5; color: #065f46; }
+        .msg-error { background: #fee2e2; color: #991b1b; }
+        .section-title { font-size: 14px; font-weight: 600; color: #374151; margin: 12px 0 8px; }
+        .hint { font-size: 12px; color: #9ca3af; margin-top: 4px; }
+        .project-toggle { cursor: pointer; user-select: none; }
+        .project-body { display: none; }
+        .project-body.expanded { display: block; }
+        #authOverlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(255,255,255,0.96); display: flex; align-items: center; justify-content: center; z-index: 1000; }
+        #authBox { background: #fff; padding: 32px; border-radius: 8px; box-shadow: 0 4px 20px rgba(0,0,0,0.15); width: 360px; max-width: 90%; }
+        #authBox h2 { margin-bottom: 8px; }
+        #authBox p { font-size: 13px; color: #6b7280; margin-bottom: 16px; }
+        #authBox input { width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px; margin-bottom: 12px; }
+        #authBox button { width: 100%; }
+        #authError { color: #dc2626; font-size: 13px; margin-top: 8px; display: none; }
+    </style>
+</head>
+<body>
+    <div id="authOverlay">
+        <div id="authBox">
+            <h2>需要访问令牌</h2>
+            <p>请输入 ProcessGuard 访问令牌。可从安装目录下的 .guard 文件查看，或通过开始菜单快捷方式自动登录。</p>
+            <input type="password" id="authToken" placeholder="输入 Token" autocomplete="off">
+            <button class="btn btn-primary" onclick="doAuth()">进入控制台</button>
+            <div id="authError">令牌错误</div>
+        </div>
+    </div>
+
+    <div class="container">
+        <h1>进程守护控制台</h1>
+
+        <div class="card">
+            <div class="status-row">
+                <div>
+                    <span>守护状态：</span>
+                    <span id="daemonState" class="status-badge">加载中...</span>
+                </div>
+                <div>
+                    <button id="btnPause" class="btn btn-warning" onclick="pause()">暂停守护</button>
+                    <button id="btnResume" class="btn btn-primary" onclick="resume()">恢复守护</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="status-row" style="margin-bottom: 16px;">
+                <h2>项目列表</h2>
+                <span class="refresh">自动刷新：每 5 秒</span>
+            </div>
+            <div id="projects">加载中...</div>
+        </div>
+
+        <div class="card">
+            <div class="status-row" style="margin-bottom: 16px;">
+                <h2>配置管理</h2>
+                <button class="btn btn-primary" onclick="saveConfig()">保存配置</button>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Web 控制台端口</label>
+                    <input type="number" id="cfgWebPort" value="18080">
+                </div>
+                <div class="form-group">
+                    <label>对端检查间隔（秒）</label>
+                    <input type="number" id="cfgPeerInterval" value="10">
+                </div>
+            </div>
+
+            <div id="configProjects"></div>
+
+            <button class="btn btn-secondary" onclick="addProject()">+ 添加项目</button>
+
+            <div id="configMsg" class="msg"></div>
+            <p class="hint">
+                修改并保存后，点击重启将由对端 B 停止并重新拉起 ProcessGuard-A 服务生效。原配置会自动备份为 config.yaml.bak。
+            </p>
+        </div>
+
+        <div class="card">
+            <h2 style="margin-bottom: 12px;">最近事件</h2>
+            <div id="events" class="logs">加载中...</div>
+        </div>
+    </div>
+
+    <script>
+        let currentConfig = { webPort: 18080, peerCheckInterval: 10, projects: [] };
+        let authToken = '';
+
+        function initAuth() {
+            const params = new URLSearchParams(window.location.search);
+            const urlToken = params.get('token');
+            if (urlToken) {
+                authToken = urlToken;
+                sessionStorage.setItem('guard_token', authToken);
+                params.delete('token');
+                const newSearch = params.toString();
+                window.history.replaceState({}, '', window.location.pathname + (newSearch ? '?' + newSearch : ''));
+                document.getElementById('authOverlay').style.display = 'none';
+                startApp();
+                return;
+            }
+            const stored = sessionStorage.getItem('guard_token');
+            if (stored) {
+                authToken = stored;
+                document.getElementById('authOverlay').style.display = 'none';
+                startApp();
+                return;
+            }
+            document.getElementById('authOverlay').style.display = 'flex';
+            document.getElementById('authToken').addEventListener('keydown', e => { if (e.key === 'Enter') doAuth(); });
+        }
+
+        async function doAuth() {
+            authToken = document.getElementById('authToken').value.trim();
+            if (!authToken) return;
+            try {
+                const res = await apiFetch('/api/auth');
+                if (res.ok) {
+                    sessionStorage.setItem('guard_token', authToken);
+                    document.getElementById('authOverlay').style.display = 'none';
+                    document.getElementById('authError').style.display = 'none';
+                    startApp();
+                } else {
+                    document.getElementById('authError').style.display = 'block';
+                }
+            } catch (e) {
+                document.getElementById('authError').style.display = 'block';
+            }
+        }
+
+        function startApp() {
+            loadStatus();
+            loadConfig();
+            loadEvents();
+            setInterval(() => { loadStatus(); loadEvents(); }, 5000);
+        }
+
+        function apiFetch(url, options = {}) {
+            options.headers = options.headers || {};
+            options.headers['X-Guard-Token'] = authToken;
+            return fetch(url, options);
+        }
+
+        async function loadStatus() {
+            try {
+                const res = await apiFetch('/api/status');
+                const data = await res.json();
+                renderState(data.state);
+                renderProjects(data.projects || []);
+            } catch (e) {
+                console.error(e);
+                document.getElementById('daemonState').textContent = '连接失败';
+            }
+        }
+
+        async function loadEvents() {
+            try {
+                const res = await apiFetch('/api/events');
+                const data = await res.json();
+                const container = document.getElementById('events');
+                if (data.events && data.events.length) {
+                    container.innerHTML = data.events.map(e => {
+                        const time = e.time ? e.time.replace('T', ' ').substring(0, 19) : '';
+                        return `<div>[${time}] [${eventTypeText(e.type)}] ${e.target ? '(' + e.target + ')' : ''} ${e.message}</div>`;
+                    }).join('');
+                    container.scrollTop = container.scrollHeight;
+                } else {
+                    container.textContent = '暂无事件';
+                }
+            } catch (e) {
+                console.error(e);
+            }
+        }
+
+        function eventTypeText(type) {
+            const map = {
+                'peer_down': '对端掉线',
+                'peer_recover': '对端恢复',
+                'project_down': '项目掉线',
+                'project_start': '项目启动',
+                'project_stop': '项目停止',
+                'project_started': '项目启动成功',
+                'project_failed': '项目连续失败',
+                'daemon_pause': '暂停守护',
+                'daemon_resume': '恢复守护',
+                'service_restart': '服务重启',
+                'config_saved': '配置保存',
+                'manual_start': '手动启动',
+                'manual_stop': '手动停止',
+                'manual_restart': '手动重启'
+            };
+            return map[type] || type;
+        }
+
+        async function loadConfig() {
+            try {
+                const res = await apiFetch('/api/config');
+                currentConfig = await res.json();
+                renderConfigForm();
+            } catch (e) {
+                console.error(e);
+            }
+        }
+
+        function renderState(state) {
+            const el = document.getElementById('daemonState');
+            if (state === 'RUNNING') {
+                el.className = 'status-badge status-running';
+                el.innerHTML = '🟢 运行中';
+            } else {
+                el.className = 'status-badge status-paused';
+                el.innerHTML = '⏸ 已暂停';
+            }
+        }
+
+        function renderProjects(projects) {
+            const container = document.getElementById('projects');
+            if (!projects.length) {
+                container.innerHTML = '<div class="empty">暂无配置项目</div>';
+                return;
+            }
+            container.innerHTML = projects.map(p => `
+                <div class="project">
+                    <div class="project-header">
+                        <span class="project-name">${p.name}</span>
+                        <span class="status-badge ${p.state === 'RUNNING' ? 'status-running' : p.state === 'FAILED' ? 'status-failed' : 'status-paused'}">${stateText(p.state)}</span>
+                    </div>
+                    <div class="project-info">
+                        <span>PID: ${p.pid || '-'}</span>
+                        <span>启动时间: ${p.startTime || '-'}</span>
+                        <span>连续失败: ${p.failCount || 0}</span>
+                    </div>
+                    <div class="actions">
+                        <button class="btn btn-primary" onclick="projectAction('start', '${p.name}')" ${p.state === 'FAILED' ? 'disabled' : ''}>启动</button>
+                        <button class="btn btn-warning" onclick="projectAction('stop', '${p.name}')">停止</button>
+                        <button class="btn btn-danger" onclick="projectAction('restart', '${p.name}')">重启</button>
+                        <button class="btn btn-primary" onclick="projectAction('reset', '${p.name}')" ${p.state !== 'FAILED' ? 'disabled' : ''}>重置失败</button>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function stateText(state) {
+            const map = {
+                'RUNNING': '🟢 运行中',
+                'PAUSED': '⏸ 已暂停',
+                'STARTING': '🟡 启动中',
+                'FAILED': '🔴 失败（需手动重置）',
+                'STOPPED': '⚪ 已停止',
+                'INIT': '⚪ 初始化'
+            };
+            return map[state] || state;
+        }
+
+        function renderConfigForm() {
+            document.getElementById('cfgWebPort').value = currentConfig.webPort || 18080;
+            document.getElementById('cfgPeerInterval').value = currentConfig.peerCheckInterval || 10;
+
+            const container = document.getElementById('configProjects');
+            if (!currentConfig.projects.length) {
+                container.innerHTML = '<div class="empty" style="padding: 20px;">暂无项目，点击"添加项目"</div>';
+                return;
+            }
+
+            container.innerHTML = currentConfig.projects.map((p, idx) => `
+                <div class="project" data-idx="${idx}">
+                    <div class="project-header">
+                        <span class="project-name project-toggle" onclick="toggleProject(${idx})">📁 ${p.name || '未命名项目'}</span>
+                        <button class="btn btn-danger btn-sm" onclick="deleteProject(${idx})">删除</button>
+                    </div>
+                    <div class="project-body" id="project-body-${idx}">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>项目名称</label>
+                                <input type="text" class="cfg-name" value="${p.name || ''}">
+                            </div>
+                            <div class="form-group">
+                                <label><input type="checkbox" class="cfg-enabled" ${p.enabled ? 'checked' : ''}> 启用守护</label>
+                            </div>
+                        </div>
+
+                        <div class="form-row-3">
+                            <div class="form-group">
+                                <label>监控方式</label>
+                                <select class="cfg-monitor-type">
+                                    <option value="port" ${p.monitorType === 'port' ? 'selected' : ''}>端口</option>
+                                    <option value="process" ${p.monitorType === 'process' ? 'selected' : ''}>进程名</option>
+                                    <option value="mixed" ${p.monitorType === 'mixed' ? 'selected' : ''}>混合</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label>监控端口</label>
+                                <input type="number" class="cfg-monitor-port" value="${p.monitorPort || ''}">
+                            </div>
+                            <div class="form-group">
+                                <label>监控进程名</label>
+                                <input type="text" class="cfg-monitor-process" value="${p.monitorProcessName || ''}">
+                            </div>
+                        </div>
+
+                        <div class="form-row-3">
+                            <div class="form-group">
+                                <label>检查间隔（秒）</label>
+                                <input type="number" class="cfg-check-interval" value="${p.checkInterval || 15}">
+                            </div>
+                            <div class="form-group">
+                                <label>启动超时（秒）</label>
+                                <input type="number" class="cfg-startup-timeout" value="${p.startupTimeout || 60}">
+                            </div>
+                            <div class="form-group">
+                                <label>最大重启次数</label>
+                                <input type="number" class="cfg-max-restarts" value="${p.maxRestartAttempts || 3}">
+                            </div>
+                        </div>
+
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>重启间隔（秒）</label>
+                                <input type="number" class="cfg-restart-delay" value="${p.restartDelay || 10}">
+                            </div>
+                            <div class="form-group">
+                                <label>启动模式</label>
+                                <select class="cfg-start-mode">
+                                    <option value="async" ${p.startMode === 'sync' ? '' : 'selected'}>异步（脚本内自行启动业务）</option>
+                                    <option value="sync" ${p.startMode === 'sync' ? 'selected' : ''}>同步（等待脚本执行完成）</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>启动脚本</label>
+                                <input type="text" class="cfg-start-script" value="${p.startScript || ''}">
+                            </div>
+                            <div class="form-group">
+                                <label>停止脚本（可选）</label>
+                                <input type="text" class="cfg-stop-script" value="${p.stopScript || ''}">
+                            </div>
+                        </div>
+
+                        <div class="section-title">前置动作</div>
+                        <div class="cfg-pre-actions">${renderActions(p.preActions || [], idx, 'pre')}</div>
+                        <button class="btn btn-secondary btn-sm" onclick="addAction(${idx}, 'pre')">+ 添加前置动作</button>
+
+                        <div class="section-title">后置动作</div>
+                        <div class="cfg-post-actions">${renderActions(p.postActions || [], idx, 'post')}</div>
+                        <button class="btn btn-secondary btn-sm" onclick="addAction(${idx}, 'post')">+ 添加后置动作</button>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function renderActions(actions, projectIdx, type) {
+            if (!actions.length) return '<div class="hint">暂无动作</div>';
+            return actions.map((a, idx) => `
+                <div class="action-item" data-idx="${idx}">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>动作类型</label>
+                            <select class="action-type" onchange="renderActionParams(${projectIdx}, ${idx}, '${type}')">
+                                <option value="" ${!a.type ? 'selected' : ''}>请选择</option>
+                                <option value="killProcess" ${a.type === 'killProcess' ? 'selected' : ''}>结束进程</option>
+                                <option value="killPort" ${a.type === 'killPort' ? 'selected' : ''}>结束端口进程</option>
+                                <option value="killWindow" ${a.type === 'killWindow' ? 'selected' : ''}>关闭窗口</option>
+                                <option value="wait" ${a.type === 'wait' ? 'selected' : ''}>等待</option>
+                                <option value="runCommand" ${a.type === 'runCommand' ? 'selected' : ''}>执行命令</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <button class="btn btn-danger btn-sm" onclick="deleteAction(${projectIdx}, ${idx}, '${type}')">删除</button>
+                        </div>
+                    </div>
+                    <div class="action-params" id="action-params-${projectIdx}-${type}-${idx}">${renderActionParamInputs(a)}</div>
+                </div>
+            `).join('');
+        }
+
+        function renderActionParamInputs(action) {
+            const params = action.params || {};
+            switch (action.type) {
+                case 'killProcess':
+                    return paramInput('进程名', 'processName', params.processName || '');
+                case 'killPort':
+                    return paramInput('端口', 'port', params.port || '');
+                case 'killWindow':
+                    return paramInput('窗口标题', 'windowTitle', params.windowTitle || '');
+                case 'wait':
+                    return paramInput('等待毫秒', 'millis', params.millis || '');
+                case 'runCommand':
+                    return paramInput('命令', 'command', params.command || '') + paramInput('工作目录', 'workDir', params.workDir || '');
+                default:
+                    return '';
+            }
+        }
+
+        function paramInput(label, name, value) {
+            return `
+                <div class="form-group">
+                    <label>${label}</label>
+                    <input type="text" class="action-param" data-name="${name}" value="${value}">
+                </div>
+            `;
+        }
+
+        function toggleProject(idx) {
+            const body = document.getElementById(`project-body-${idx}`);
+            body.classList.toggle('expanded');
+        }
+
+        function addProject() {
+            collectConfigFromDOM();
+            currentConfig.projects.push({
+                name: '新项目',
+                enabled: true,
+                monitorType: 'port',
+                monitorPort: 8080,
+                monitorProcessName: '',
+                checkInterval: 15,
+                startupTimeout: 60,
+                maxRestartAttempts: 3,
+                restartDelay: 10,
+                startMode: 'async',
+                startScript: '',
+                stopScript: '',
+                preActions: [],
+                postActions: []
+            });
+            renderConfigForm();
+            toggleProject(currentConfig.projects.length - 1);
+        }
+
+        function deleteProject(idx) {
+            if (!confirm('确定删除这个项目吗？')) return;
+            collectConfigFromDOM();
+            currentConfig.projects.splice(idx, 1);
+            renderConfigForm();
+        }
+
+        function addAction(projectIdx, type) {
+            collectConfigFromDOM();
+            currentConfig.projects[projectIdx][type === 'pre' ? 'preActions' : 'postActions'].push({
+                type: 'wait',
+                params: { millis: '1000' }
+            });
+            renderConfigForm();
+            toggleProject(projectIdx);
+        }
+
+        function deleteAction(projectIdx, actionIdx, type) {
+            collectConfigFromDOM();
+            currentConfig.projects[projectIdx][type === 'pre' ? 'preActions' : 'postActions'].splice(actionIdx, 1);
+            renderConfigForm();
+            toggleProject(projectIdx);
+        }
+
+        function renderActionParams(projectIdx, actionIdx, type) {
+            collectConfigFromDOM();
+            const action = currentConfig.projects[projectIdx][type === 'pre' ? 'preActions' : 'postActions'][actionIdx];
+            const select = document.querySelector(`#configProjects .project[data-idx="${projectIdx}"] .cfg-${type}-actions .action-item[data-idx="${actionIdx}"] .action-type`);
+            action.type = select ? select.value : '';
+            action.params = {};
+            const container = document.getElementById(`action-params-${projectIdx}-${type}-${actionIdx}`);
+            container.innerHTML = renderActionParamInputs(action);
+        }
+
+        function collectConfig() {
+            collectConfigFromDOM();
+            return currentConfig;
+        }
+
+        function collectConfigFromDOM() {
+            const projects = [];
+            document.querySelectorAll('#configProjects .project').forEach(el => {
+                const p = {
+                    name: el.querySelector('.cfg-name').value,
+                    enabled: el.querySelector('.cfg-enabled').checked,
+                    monitorType: el.querySelector('.cfg-monitor-type').value,
+                    monitorPort: parseInt(el.querySelector('.cfg-monitor-port').value) || 0,
+                    monitorProcessName: el.querySelector('.cfg-monitor-process').value,
+                    checkInterval: parseInt(el.querySelector('.cfg-check-interval').value) || 15,
+                    startupTimeout: parseInt(el.querySelector('.cfg-startup-timeout').value) || 60,
+                    maxRestartAttempts: parseInt(el.querySelector('.cfg-max-restarts').value) || 3,
+                    restartDelay: parseInt(el.querySelector('.cfg-restart-delay').value) || 10,
+                    startMode: el.querySelector('.cfg-start-mode').value || 'async',
+                    startScript: el.querySelector('.cfg-start-script').value,
+                    stopScript: el.querySelector('.cfg-stop-script').value,
+                    preActions: collectActions(el.querySelector('.cfg-pre-actions')),
+                    postActions: collectActions(el.querySelector('.cfg-post-actions'))
+                };
+                projects.push(p);
+            });
+
+            currentConfig = {
+                webPort: parseInt(document.getElementById('cfgWebPort').value) || 18080,
+                peerCheckInterval: parseInt(document.getElementById('cfgPeerInterval').value) || 10,
+                projects: projects
+            };
+        }
+
+        function collectActions(container) {
+            const actions = [];
+            container.querySelectorAll('.action-item').forEach(el => {
+                const type = el.querySelector('.action-type').value;
+                if (!type) return;
+                const params = {};
+                el.querySelectorAll('.action-param').forEach(input => {
+                    params[input.dataset.name] = input.value;
+                });
+                actions.push({ type, params });
+            });
+            return actions;
+        }
+
+        async function saveConfig() {
+            const data = collectConfig();
+            const msgEl = document.getElementById('configMsg');
+            try {
+                const res = await apiFetch('/api/config', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+                const result = await res.json();
+                if (res.ok) {
+                    showConfigMsg(result.message || '配置已保存', 'success');
+                    if (confirm('配置已保存，是否立即重启 ProcessGuard-A 服务生效？')) {
+                        await restartService();
+                    }
+                } else {
+                    showConfigMsg(result.error || '保存失败', 'error');
+                }
+            } catch (e) {
+                showConfigMsg('保存失败：' + e.message, 'error');
+            }
+        }
+
+        async function restartService() {
+            const msgEl = document.getElementById('configMsg');
+            try {
+                const res = await apiFetch('/api/restart', { method: 'POST' });
+                const result = await res.json();
+                if (res.ok) {
+                    showConfigMsg(result.message || 'A 服务已停止，将由对端 B 自动拉起，约 10-20 秒后刷新', 'success');
+                    setTimeout(() => { window.location.reload(); }, 15000);
+                } else {
+                    showConfigMsg(result.error || '重启失败', 'error');
+                }
+            } catch (e) {
+                // A 停止自身可能导致连接中断，属于预期行为，等待 B 拉起后刷新
+                showConfigMsg('A 服务正在重启，约 10-20 秒后请手动刷新页面', 'warning');
+            }
+        }
+
+        function showConfigMsg(text, type) {
+            const msgEl = document.getElementById('configMsg');
+            msgEl.textContent = text;
+            msgEl.className = 'msg msg-' + type;
+            msgEl.style.display = 'block';
+            setTimeout(() => { msgEl.style.display = 'none'; }, 5000);
+        }
+
+        async function pause() {
+            await apiFetch('/api/pause');
+            await loadStatus();
+        }
+
+        async function resume() {
+            await apiFetch('/api/resume');
+            await loadStatus();
+        }
+
+        async function projectAction(action, name) {
+            const actionText = {
+                'start': '启动',
+                'stop': '停止',
+                'restart': '重启',
+                'reset': '重置失败计数'
+            };
+            if (!confirm(`确定要${actionText[action] || action}项目 ${name} 吗？`)) return;
+            await apiFetch(`/api/projects/${action}?name=${encodeURIComponent(name)}`, { method: 'POST' });
+            await loadStatus();
+        }
+
+        initAuth();
+    </script>
+</body>
+</html>

@@ -1,0 +1,84 @@
+# 进程守护配置
+# 此配置文件由主守护 (A) 和备守护 (B) 共用
+
+# 当前实例标识，a 为主守护，b 为备守护
+# 命令行 --instance 会覆盖此值
+instance: a
+
+# 日志目录
+logDir: logs
+
+# 暂停状态持久化文件
+stateFile: daemon.state
+
+# Web 控制台地址（仅限本机访问）
+webHost: 127.0.0.1
+webPort: 18080
+
+# 对端互保配置
+peer:
+  # 对端实例标识
+  instanceId: b
+  # 对端服务名（留空则自动推导为 ProcessGuard-b）
+  serviceName: ""
+  # 检查间隔（秒）
+  checkInterval: 10
+  # 对端服务异常时执行的拉起脚本（可选，通常 B 用不到）
+  startScript: ""
+
+# 被守护项目列表
+projects:
+  - name: YourApp
+    enabled: true
+
+    # 监控方式：port / process / mixed
+    monitor:
+      type: port
+      port: 10296
+      host: 127.0.0.1
+      # 若用进程名监控，可配置：
+      # processName: xjar.exe
+
+    # 检查间隔（秒）
+    checkInterval: 15
+
+    # 启动超时（秒）
+    startupTimeout: 60
+
+    # 连续失败最大重启次数
+    maxRestartAttempts: 3
+
+    # 重启间隔（秒）
+    restartDelay: 10
+
+    # 项目启动脚本路径（相对于工作目录或绝对路径）
+    startScript: "Start.bat"
+
+    # 项目停止脚本路径（可选）
+    stopScript: "Stop.bat"
+
+    # 前置动作：运行 startScript 之前执行
+    preActions:
+      - type: killProcess
+        params:
+          processName: xjar.exe
+      - type: wait
+        params:
+          millis: "1000"
+
+    # 后置动作：确认项目启动成功后执行
+    postActions:
+      - type: killWindow
+        params:
+          windowTitle: xjar.exe
+      - type: wait
+        params:
+          millis: "2000"
+
+  # 可继续添加更多项目
+  # - name: AnotherSystem
+  #   enabled: false
+  #   monitor:
+  #     type: port
+  #     port: 8080
+  #   startScript: "AnotherStart.bat"

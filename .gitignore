@@ -1,0 +1,15 @@
+.idea/
+*.exe
+*.log
+*.jsonl
+logs/
+dist/logs/
+test-run/logs/
+test-run/*.state
+*.state
+dist/config.yaml.bak
+config.yaml.bak
+.guard
+.DS_Store
+Thumbs.db
+/test-run/
