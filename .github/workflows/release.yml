@@ -1,0 +1,44 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+
+      - name: Build daemon-go.exe
+        run: go build -ldflags "-s -w" -o dist/daemon-go.exe ./cmd/daemon
+
+      - name: Copy release files
+        run: |
+          copy config.yaml dist\config.yaml
+          copy icon.ico dist\icon.ico
+          xcopy /E /I /Y scripts dist\scripts
+          copy README.md dist\README.md
+
+      - name: Zip release package
+        run: |
+          $version = $env:GITHUB_REF_NAME
+          Compress-Archive -Path dist\* -DestinationPath "Daemon-Go-${version}-windows-amd64.zip"
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: Daemon-Go-*-windows-amd64.zip
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
