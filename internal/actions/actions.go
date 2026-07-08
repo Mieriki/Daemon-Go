@@ -319,6 +319,8 @@ func RunStartScript(ctx *Context, scriptPath, workDir string, sync bool) error {
 	}
 	if workDir == "" {
 		workDir = resolveWorkDir(scriptPath)
+	} else {
+		workDir = sanitizeScriptPath(workDir)
 	}
 	ctx.Logger.Infof("run start script: %s (sync=%v, workDir=%s)", scriptPath, sync, workDir)
 
@@ -353,6 +355,8 @@ func StopProject(ctx *Context, scriptPath, workDir string) error {
 	}
 	if workDir == "" {
 		workDir = resolveWorkDir(scriptPath)
+	} else {
+		workDir = sanitizeScriptPath(workDir)
 	}
 	ctx.Logger.Infof("run stop script: %s (workDir=%s)", scriptPath, workDir)
 	cmd := exec.Command("cmd", "/c", scriptPath)
