@@ -608,12 +608,12 @@
         }
 
         async function pause() {
-            await apiFetch('/api/pause');
+            await apiFetch('/api/pause', { method: 'POST' });
             await loadStatus();
         }
 
         async function resume() {
-            await apiFetch('/api/resume');
+            await apiFetch('/api/resume', { method: 'POST' });
             await loadStatus();
         }
 

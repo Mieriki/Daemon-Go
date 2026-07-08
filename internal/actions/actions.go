@@ -311,6 +311,12 @@ func sanitizeScriptPath(scriptPath string) string {
 // RunStartScript 执行启动脚本
 func RunStartScript(ctx *Context, scriptPath, workDir string, sync bool) error {
 	scriptPath = sanitizeScriptPath(scriptPath)
+	if scriptPath == "" {
+		return fmt.Errorf("start script is empty")
+	}
+	if _, err := os.Stat(scriptPath); err != nil {
+		return fmt.Errorf("start script not found: %s", scriptPath)
+	}
 	if workDir == "" {
 		workDir = resolveWorkDir(scriptPath)
 	}

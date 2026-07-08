@@ -35,51 +35,5 @@ peer:
 allowedCommands: []
 
 # 被守护项目列表
-projects:
-  - name: YourApp
-    enabled: true
-
-    # 监控方式：port / process / mixed
-    monitor:
-      type: port
-      port: 8080
-      host: 127.0.0.1
-      # 若用进程名监控，可配置：
-      # processName: app.exe
-
-    # 检查间隔（秒）
-    checkInterval: 15
-
-    # 启动超时（秒）
-    startupTimeout: 60
-
-    # 连续失败最大重启次数
-    maxRestartAttempts: 3
-
-    # 重启间隔（秒）
-    restartDelay: 10
-
-    # 启动模式：async 异步（推荐）/ sync 同步
-    # async：脚本启动业务后立即返回，由守护进程轮询检测
-    # sync：等待脚本执行完成后才返回
-    startMode: async
-
-    # 项目启动脚本路径（支持相对路径和绝对路径）
-    startScript: "Start.bat"
-
-    # 项目停止脚本路径（可选）
-    stopScript: "Stop.bat"
-
-    # 前置动作：运行 startScript 之前执行
-    preActions: []
-
-    # 后置动作：确认项目启动成功后执行
-    postActions: []
-
-  # 可继续添加更多项目
-  # - name: AnotherSystem
-  #   enabled: false
-  #   monitor:
-  #     type: port
-  #     port: 8080
-  #   startScript: "AnotherStart.bat"
+# 安装后请先在此配置需要守护的项目，再重启服务生效
+projects: []
